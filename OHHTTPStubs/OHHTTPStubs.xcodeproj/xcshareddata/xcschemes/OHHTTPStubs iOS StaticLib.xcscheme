@@ -37,7 +37,7 @@
       </BuildActionEntries>
    </BuildAction>
    <TestAction
-      buildConfiguration = "Debug"
+      buildConfiguration = "Release"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES">
@@ -51,6 +51,53 @@
                BlueprintName = "OHHTTPStubs iOS Lib Tests"
                ReferencedContainer = "container:OHHTTPStubs.xcodeproj">
             </BuildableReference>
+            <SkippedTests>
+               <Test
+                  Identifier = "AFNetworkingTests">
+               </Test>
+               <Test
+                  Identifier = "MocktailTests">
+               </Test>
+               <Test
+                  Identifier = "NSURLConnectionDelegateTests">
+               </Test>
+               <Test
+                  Identifier = "NSURLConnectionTests">
+               </Test>
+               <Test
+                  Identifier = "NSURLSessionTests/test_NSURLSessionCustomHTTPBody">
+               </Test>
+               <Test
+                  Identifier = "NSURLSessionTests/test_NSURLSessionDefaultConfig">
+               </Test>
+               <Test
+                  Identifier = "NSURLSessionTests/test_NSURLSessionDefaultConfig_Disabled">
+               </Test>
+               <Test
+                  Identifier = "NSURLSessionTests/test_NSURLSessionDefaultConfig_notFollowingRedirects">
+               </Test>
+               <Test
+                  Identifier = "NSURLSessionTests/test_NSURLSessionEphemeralConfig">
+               </Test>
+               <Test
+                  Identifier = "NSURLSessionTests/test_NSURLSessionNativeHTTPBody">
+               </Test>
+               <Test
+                  Identifier = "NSURLSessionTests/test_NSURLSession_DataTask_DelegateMethods">
+               </Test>
+               <Test
+                  Identifier = "NilValuesTests">
+               </Test>
+               <Test
+                  Identifier = "OHPathHelpersTests">
+               </Test>
+               <Test
+                  Identifier = "TimingTests">
+               </Test>
+               <Test
+                  Identifier = "WithContentsOfURLTests">
+               </Test>
+            </SkippedTests>
          </TestableReference>
       </Testables>
       <MacroExpansion>

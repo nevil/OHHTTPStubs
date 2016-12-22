@@ -419,8 +419,12 @@ static NSTimeInterval const kSlotTime = 0.25; // Must be >0. We will send a chun
             redirectLocationURL = nil;
         }
         [self executeOnClientRunLoopAfterDelay:responseStub.requestTime block:^{
+            int mystatusCode = responseStub.statusCode;
+            NSLog(@"responseStub(%p, %p) in for status %d, stopped %d", self, request, mystatusCode, self.stopped);
             if (!self.stopped)
             {
+#define REDIRECT_AFTER_DATA 0
+#if !REDIRECT_AFTER_DATA
                 // Notify if a redirection occurred
                 if (((responseStub.statusCode > 300) && (responseStub.statusCode < 400)) && redirectLocationURL)
                 {
@@ -430,18 +434,33 @@ static NSTimeInterval const kSlotTime = 0.25; // Must be >0. We will send a chun
                     {
                         OHHTTPStubs.sharedInstance.onStubRedirectBlock(request, redirectRequest, self.stub, responseStub);
                     }
+                    NSLog(@"responseStub(%p, %p) before sleeping for status %d", self, request, mystatusCode);
+//                    usleep(605);
+                    usleep(1000000);
+                    NSLog(@"responseStub(%p, %p) after sleeping for status %d", self, request, mystatusCode);
+                } else {
+//                    NSLog(@"responseStub(%p, %p) before sleeping for status %d", self, request, mystatusCode);
+//                    usleep(1000000);
+//                    NSLog(@"responseStub(%p, %p) after sleeping for status %d", self, request, mystatusCode);
                 }
-                
+#endif
+#define SEND_RESPONSE 0
+#if SEND_RESPONSE
                 // Send the response (even for redirections)
                 [client URLProtocol:self didReceiveResponse:urlResponse cacheStoragePolicy:NSURLCacheStorageNotAllowed];
+
                 if(responseStub.inputStream.streamStatus == NSStreamStatusNotOpen)
                 {
                     [responseStub.inputStream open];
                 }
+#endif
                 [self streamDataForClient:client
                          withStubResponse:responseStub
+                              urlResponse:urlResponse
                                completion:^(NSError * error)
                  {
+                     NSLog(@"responseStub(%p, %p) streamDataForClient completed %d", self, request, mystatusCode);
+
                      [responseStub.inputStream close];
                      NSError *blockError = nil;
                      if (error==nil)
@@ -458,6 +477,9 @@ static NSTimeInterval const kSlotTime = 0.25; // Must be >0. We will send a chun
                          OHHTTPStubs.sharedInstance.afterStubFinishBlock(request, self.stub, responseStub, blockError);
                      }
                  }];
+//                }
+
+                NSLog(@"responseStub(%p) out for status %d", self, mystatusCode);
             }
         }];
     } else {
@@ -477,7 +499,9 @@ static NSTimeInterval const kSlotTime = 0.25; // Must be >0. We will send a chun
 
 - (void)stopLoading
 {
+    NSLog(@"stopLoading(%p) in", self);
     self.stopped = YES;
+    NSLog(@"stopLoading(%p) out", self);
 }
 
 typedef struct {
@@ -488,10 +512,21 @@ typedef struct {
 
 - (void)streamDataForClient:(id<NSURLProtocolClient>)client
            withStubResponse:(OHHTTPStubsResponse*)stubResponse
+                urlResponse:(NSURLResponse*)urlResponse
                  completion:(void(^)(NSError * error))completion
 {
+    NSLog(@"streamDataForClientWithStub(%p) in code: %d, stopped %d", self, stubResponse.statusCode, self.stopped);
     if (!self.stopped)
     {
+
+        // Send the response (even for redirections)
+        [client URLProtocol:self didReceiveResponse:urlResponse cacheStoragePolicy:NSURLCacheStorageNotAllowed];
+
+        if(stubResponse.inputStream.streamStatus == NSStreamStatusNotOpen)
+        {
+            [stubResponse.inputStream open];
+        }
+
         if ((stubResponse.dataSize>0) && stubResponse.inputStream.hasBytesAvailable)
         {
             // Compute timing data once and for all for this stub
@@ -519,6 +554,7 @@ typedef struct {
             }
             
             [self streamDataForClient:client
+                     withStubResponse:stubResponse
                            fromStream:stubResponse.inputStream
                            timingInfo:timingInfo
                            completion:completion];
@@ -526,22 +562,27 @@ typedef struct {
         else
         {
             [self executeOnClientRunLoopAfterDelay:stubResponse.responseTime block:^{
+                NSLog(@"streamDataForClientWithStub(%p) in runloop after delay code: %d, stopped %d", self, stubResponse.statusCode, self.stopped);
+
                 if (completion && !self.stopped)
                 {
                     completion(nil);
                 }
+                NSLog(@"streamDataForClientWithStub(%p) out runloop after delay code: %d, stopped %d", self, stubResponse.statusCode, self.stopped);
             }];
         }
     }
+    NSLog(@"streamDataForClientWithStub(%p) out code: %d", self, stubResponse.statusCode);
 }
 
 - (void) streamDataForClient:(id<NSURLProtocolClient>)client
+            withStubResponse:(OHHTTPStubsResponse*)stubResponse
                   fromStream:(NSInputStream*)inputStream
                   timingInfo:(OHHTTPStubsStreamTimingInfo)timingInfo
                   completion:(void(^)(NSError * error))completion
 {
     NSParameterAssert(timingInfo.chunkSizePerSlot > 0);
-    
+    NSLog(@"streamDataForClient(%p) in code: %d, stopped %d", self, stubResponse.statusCode, self.stopped);
     if (inputStream.hasBytesAvailable && (!self.stopped))
     {
         // This is needed in case we computed a non-integer chunkSizePerSlot, to avoid cumulative errors
@@ -553,8 +594,10 @@ typedef struct {
         {
             // Nothing to read at this pass, but probably later
             [self executeOnClientRunLoopAfterDelay:timingInfo.slotTime block:^{
-                [self streamDataForClient:client fromStream:inputStream
+                NSLog(@"streamDataForClient(%p) in code: %d line %d", self, stubResponse.statusCode, __LINE__);
+                [self streamDataForClient:client withStubResponse:stubResponse fromStream:inputStream
                                timingInfo:timingInfo completion:completion];
+                NSLog(@"streamDataForClient(%p) out code: %d line %d", self, stubResponse.statusCode, __LINE__);
             }];
         } else {
             uint8_t* buffer = (uint8_t*)malloc(sizeof(uint8_t)*chunkSizeToRead);
@@ -565,9 +608,11 @@ typedef struct {
                 // Wait for 'slotTime' seconds before sending the chunk.
                 // If bytesRead < chunkSizePerSlot (because we are near the EOF), adjust slotTime proportionally to the bytes remaining
                 [self executeOnClientRunLoopAfterDelay:((double)bytesRead / (double)chunkSizeToRead) * timingInfo.slotTime block:^{
+                    NSLog(@"streamDataForClient(%p) in code: %d line %d", self, stubResponse.statusCode, __LINE__);
                     [client URLProtocol:self didLoadData:data];
-                    [self streamDataForClient:client fromStream:inputStream
+                    [self streamDataForClient:client withStubResponse:stubResponse fromStream:inputStream
                                    timingInfo:timingInfo completion:completion];
+                    NSLog(@"streamDataForClient(%p) out code: %d line %d", self, stubResponse.statusCode, __LINE__);
                 }];
             }
             else
@@ -577,7 +622,9 @@ typedef struct {
                     // Note: We may also arrive here with no error if we were just at the end of the stream (EOF)
                     // In that case, hasBytesAvailable did return YES (because at the limit of OEF) but nothing were read (because EOF)
                     // But then in that case inputStream.streamError will be nil so that's cool, we won't return an error anyway
+                    NSLog(@"streamDataForClient(%p) in code: %d line %d", self, stubResponse.statusCode, __LINE__);
                     completion(inputStream.streamError);
+                    NSLog(@"streamDataForClient(%p) out code: %d line %d", self, stubResponse.statusCode, __LINE__);
                 }
             }
             free(buffer);
@@ -587,9 +634,12 @@ typedef struct {
     {
         if (completion)
         {
+            NSLog(@"streamDataForClient(%p) in code: %d line %d", self, stubResponse.statusCode, __LINE__);
             completion(nil);
+            NSLog(@"streamDataForClient(%p) out code: %d line %d", self, stubResponse.statusCode, __LINE__);
         }
     }
+    NSLog(@"streamDataForClient(%p) out code: %d", self, stubResponse.statusCode);
 }
 
 /////////////////////////////////////////////
